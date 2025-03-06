@@ -1,4 +1,4 @@
-class VulnerableController < ApplicationController
+class SamplesController < ApplicationController
   require 'net/http'
 
   def username_lookup
