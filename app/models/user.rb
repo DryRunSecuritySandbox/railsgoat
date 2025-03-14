@@ -64,4 +64,8 @@ class User < ApplicationRecord
 
     self.save!
   end
+
+  def self.find_by_username_v(username)
+    where("username = '#{username}'")
+  end
 end
