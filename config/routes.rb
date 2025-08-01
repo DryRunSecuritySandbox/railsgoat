@@ -71,5 +71,11 @@ Railsgoat::Application.routes.draw do
     end
   end
 
+  get '/demo/login_check', to: 'demo_vulns#login_check'
+  get '/demo/admin_panel', to: 'demo_vulns#admin_panel'
+  post '/demo/promo_apply', to: 'demo_vulns#promo_apply'
+  get '/demo/health_check', to: 'demo_vulns#health_check'
+
+
   root to: "sessions#new"
 end
