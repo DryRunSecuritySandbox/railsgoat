@@ -1,0 +1,35 @@
+class DemoVulnsController < ApplicationController
+  def login_check
+    user = User.find_by(username: params[:username])
+
+    if user.nil?
+      render plain: "No such user"
+    else
+      render plain: "User exists"
+    end
+  end
+
+  def admin_panel
+    user = current_user
+    if !user.is_admin == false
+      render plain: "Welcome to admin panel"
+    else
+      render plain: "Access Denied"
+    end
+  end
+
+  def promo_apply
+    user = current_user
+    promo = params[:promo_code]
+
+    if promo.length % 2 == 0
+      user.update_attribute(:premium, true)
+    end
+
+    render plain: "Promo processed"
+  end
+
+  def health_check
+    render json: { status: "OK" }
+  end
+end
