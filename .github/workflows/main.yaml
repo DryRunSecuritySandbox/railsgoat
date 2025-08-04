@@ -1,0 +1,158 @@
+name: Rails CI/CD Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to deploy"
+        required: true
+        default: "main"
+  release:
+    types: [published]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rails_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/rails_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Setup database
+        run: bin/rails db:create db:schema:load
+
+      - name: Run tests
+        run: bin/rails test
+
+  build:
+    name: Build
+    needs: test
+    runs-on: ubuntu-latest
+    if: success() && (github.event_name == 'push' && github.ref_name == 'main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Checkout Private Repo with Org Token
+        uses: actions/checkout@v4
+        with:
+          repository: my-org/private-repo
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Create deployment package
+        run: |
+          echo "Build timestamp: $(date)" > build-info.txt
+          tar -czf rails-app.tar.gz --exclude=".git" --exclude="tmp" --exclude="log" .
+
+      - name: Cache deployment package
+        uses: actions/cache@v3
+        with:
+          path: rails-app.tar.gz
+          key: rails-app-${{ github.sha }}-${{ github.run_id }}
+
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_name == 'main')
+    steps:
+      - name: Get cached deployment package
+        uses: actions/cache@v3
+        with:
+          fail-on-cache-miss: true
+          path: rails-app.tar.gz
+          key: rails-app-${{ github.sha }}-${{ github.run_id }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Expose secret to logs (bad)
+        run: echo "AWS secret key is ${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+
+      - name: Command injection via tag input
+        run: |
+          echo "Checking out tag: ${{ github.event.inputs.tag }}"
+          git checkout ${{ github.event.inputs.tag }}
+
+      - name: Deploy to Elastic Beanstalk
+        run: |
+          aws s3 cp rails-app.tar.gz s3://${{ secrets.AWS_S3_BUCKET }}/rails-app-${{ github.sha }}.tar.gz
+          aws elasticbeanstalk create-application-version \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --version-label ${{ github.sha }} \
+            --source-bundle S3Bucket=${{ secrets.AWS_S3_BUCKET }},S3Key=rails-app-${{ github.sha }}.tar.gz
+          aws elasticbeanstalk update-environment \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --environment-name ${{ secrets.AWS_EB_DEV_ENV }} \
+            --version-label ${{ github.sha }}
+
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+    steps:
+      - name: Get cached deployment package
+        uses: actions/cache@v3
+        with:
+          fail-on-cache-miss: true
+          path: rails-app.tar.gz
+          key: rails-app-${{ github.sha }}-${{ github.run_id }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: GitHub_to_AWS_via_FederatedOIDC
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to Elastic Beanstalk
+        run: |
+          aws s3 cp rails-app.tar.gz s3://${{ secrets.AWS_S3_BUCKET }}/rails-app-${{ github.sha }}.tar.gz
+          aws elasticbeanstalk create-application-version \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --version-label ${{ github.sha }} \
+            --source-bundle S3Bucket=${{ secrets.AWS_S3_BUCKET }},S3Key=rails-app-${{ github.sha }}.tar.gz
+          aws elasticbeanstalk update-environment \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --environment-name ${{ secrets.AWS_EB_PROD_ENV }} \
+            --version-label ${{ github.sha }}
+
+      - name: Announce Production Deployment
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Application deployed to production: ${{ github.repository }}@${{ github.sha }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
