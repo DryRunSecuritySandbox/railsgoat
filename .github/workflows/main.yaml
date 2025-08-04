@@ -95,10 +95,10 @@ jobs:
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Expose secret to logs (bad)
+      - name: Log Key (debug)
         run: echo "AWS secret key is ${{ secrets.AWS_SECRET_ACCESS_KEY }}"
 
-      - name: Command injection via tag input
+      - name: Checkout Code
         run: |
           echo "Checking out tag: ${{ github.event.inputs.tag }}"
           git checkout ${{ github.event.inputs.tag }}
