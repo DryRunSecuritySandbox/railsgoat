@@ -71,5 +71,8 @@ Railsgoat::Application.routes.draw do
     end
   end
 
+# config/routes.rb
+ post 'webhooks/notify', to: 'webhooks#notify'
+
   root to: "sessions#new"
 end
