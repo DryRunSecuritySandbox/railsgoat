@@ -71,5 +71,9 @@ Railsgoat::Application.routes.draw do
     end
   end
 
+ post 'api_keys', to: 'api_keys#create'
+ post 'api_keys/show', to: 'api_keys#show'
+
+
   root to: "sessions#new"
 end
