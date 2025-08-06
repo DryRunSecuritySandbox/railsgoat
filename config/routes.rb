@@ -71,5 +71,8 @@ Railsgoat::Application.routes.draw do
     end
   end
 
+ # config/routes.rb
+ get 'fetcher/fetch', to: 'fetcher#fetch'
+
   root to: "sessions#new"
 end
