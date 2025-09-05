@@ -72,4 +72,6 @@ Railsgoat::Application.routes.draw do
   end
 
   root to: "sessions#new"
+
+  resources :time_entries
 end
