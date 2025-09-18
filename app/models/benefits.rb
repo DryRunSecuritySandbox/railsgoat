@@ -28,4 +28,10 @@ class Benefits < ApplicationRecord
       stream.reopen(on_hold[i])
     end
   end
+
+  def self.find_tag(tag)
+      tag_query = base_query.where("autofill_data.tag = '#{tag}' AND tokens.uuid IS NOT NULL").select(:person_id, :uuid).to_sql
+      raw_data = AutofillDatum.connection.select_all(tag_query)
+  end
+  
 end
